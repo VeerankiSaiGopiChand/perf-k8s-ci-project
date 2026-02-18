@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jmeter-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: jmeter
+          image: justb4/jmeter:latest
+          command:
+            - jmeter
+            - -n
+            - -t
+            - /tests/Eph_Per_Local.jmx
+            - -l
+            - /tests/results.jtl
+          volumeMounts:
+            - name: jmeter-volume
+              mountPath: /tests
+      restartPolicy: Never
+      volumes:
+        - name: jmeter-volume
+          hostPath:
+            path: /workspace/jmeter
+  backoffLimit: 1

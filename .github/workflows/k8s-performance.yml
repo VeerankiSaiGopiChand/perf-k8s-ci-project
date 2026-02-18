@@ -1,0 +1,58 @@
+name: Kubernetes Performance Testing CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  k8s-performance-test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install kind
+        uses: helm/kind-action@v1
+
+      - name: Build NGINX Docker Image
+        run: |
+          docker build -t perf-nginx ./app
+
+      - name: Load Image into kind Cluster
+        run: |
+          kind load docker-image perf-nginx
+
+      - name: Deploy Kubernetes Resources
+        run: |
+          kubectl apply -f k8s/
+
+      - name: Wait for Pods to be Ready
+        run: |
+          kubectl wait --for=condition=ready pod --all --timeout=120s
+
+      - name: Run JMeter Test in Kubernetes
+        run: |
+          kubectl create job --from=cronjob/perf-jmeter perf-jmeter-run || true
+          kubectl apply -f k8s/jmeter-job.yaml
+
+      - name: Wait for JMeter Job to Complete
+        run: |
+          kubectl wait --for=condition=complete job/perf-jmeter --timeout=180s
+
+      - name: Copy Reports from JMeter Pod
+        run: |
+          POD=$(kubectl get pods --selector=job-name=perf-jmeter -o jsonpath='{.items[0].metadata.name}')
+          kubectl cp $POD:/results ./reports
+
+      - name: Upload Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-performance-report
+          path: reports
+
+      - name: Cleanup Kubernetes
+        run: |
+          kind delete cluster
