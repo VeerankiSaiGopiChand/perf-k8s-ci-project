@@ -6,53 +6,65 @@ on:
       - main
 
 jobs:
-  k8s-performance-test:
+  performance-test:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    # Install kubectl
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: 'latest'
 
-      - name: Install kind
-        uses: helm/kind-action@v1
+    # Install kind
+    - name: Install kind
+      run: |
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
 
-      - name: Build NGINX Docker Image
-        run: |
-          docker build -t perf-nginx ./app
+    # Create ephemeral cluster
+    - name: Create kind cluster
+      run: kind create cluster
 
-      - name: Load Image into kind Cluster
-        run: |
-          kind load docker-image perf-nginx
+    # Build nginx Docker image
+    - name: Build nginx image
+      run: docker build -t perf-nginx ./app
 
-      - name: Deploy Kubernetes Resources
-        run: |
-          kubectl apply -f k8s/
+    # Load image into kind
+    - name: Load image into kind
+      run: kind load docker-image perf-nginx
 
-      - name: Wait for Pods to be Ready
-        run: |
-          kubectl wait --for=condition=ready pod --all --timeout=120s
+    # Deploy Kubernetes manifests
+    - name: Deploy to Kubernetes
+      run: kubectl apply -f k8s/
 
-      - name: Run JMeter Test in Kubernetes
-        run: |
-          kubectl create job --from=cronjob/perf-jmeter perf-jmeter-run || true
-          kubectl apply -f k8s/jmeter-job.yaml
+    # Wait for nginx pod
+    - name: Wait for Nginx
+      run: kubectl rollout status deployment/nginx-deployment
 
-      - name: Wait for JMeter Job to Complete
-        run: |
-          kubectl wait --for=condition=complete job/perf-jmeter --timeout=180s
+    # Run JMeter Job
+    - name: Wait for JMeter Job to Complete
+      run: |
+        kubectl wait --for=condition=complete job/jmeter-job --timeout=120s
 
-      - name: Copy Reports from JMeter Pod
-        run: |
-          POD=$(kubectl get pods --selector=job-name=perf-jmeter -o jsonpath='{.items[0].metadata.name}')
-          kubectl cp $POD:/results ./reports
+    # Copy reports from JMeter pod
+    - name: Copy JMeter Report
+      run: |
+        mkdir reports
+        POD=$(kubectl get pods --selector=job-name=jmeter-job -o jsonpath='{.items[0].metadata.name}')
+        kubectl cp $POD:/report ./reports
 
-      - name: Upload Report Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: k8s-performance-report
-          path: reports
+    # Upload report as artifact
+    - name: Upload Performance Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: k8s-performance-report
+        path: reports
 
-      - name: Cleanup Kubernetes
-        run: |
-          kind delete cluster
+    # Cleanup
+    - name: Delete kind cluster
+      run: kind delete cluster

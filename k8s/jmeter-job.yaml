@@ -21,6 +21,6 @@ spec:
       restartPolicy: Never
       volumes:
         - name: jmeter-volume
-          hostPath:
-            path: /workspace/jmeter
+          configMap:
+            name: jmeter-config
   backoffLimit: 1
