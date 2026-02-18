@@ -3,24 +3,31 @@ kind: Job
 metadata:
   name: jmeter-job
 spec:
+  backoffLimit: 0
   template:
     spec:
-      containers:
-        - name: jmeter
-          image: justb4/jmeter:latest
-          command:
-            - jmeter
-            - -n
-            - -t
-            - /tests/Eph_Per_Local.jmx
-            - -l
-            - /tests/results.jtl
-          volumeMounts:
-            - name: jmeter-volume
-              mountPath: /tests
       restartPolicy: Never
+      containers:
+      - name: jmeter
+        image: justb4/jmeter:latest
+        command:
+        - jmeter
+        - -n
+        - -t
+        - /tests/Ephemeral_cicd.jmx
+        - -l
+        - /results/results.jtl
+        - -e
+        - -o
+        - /results/report
+        volumeMounts:
+        - name: jmeter-test
+          mountPath: /tests
+        - name: jmeter-results
+          mountPath: /results
       volumes:
-        - name: jmeter-volume
-          configMap:
-            name: jmeter-config
-  backoffLimit: 1
+      - name: jmeter-test
+        configMap:
+          name: jmeter-config
+      - name: jmeter-results
+        emptyDir: {}
