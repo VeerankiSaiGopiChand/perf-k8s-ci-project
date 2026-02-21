@@ -11,76 +11,62 @@ jobs:
 
     steps:
 
-    # 1️⃣ Checkout code
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2️⃣ Install Kind
     - name: Install Kind
       run: |
         curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
         chmod +x ./kind
         sudo mv ./kind /usr/local/bin/kind
 
-    # 3️⃣ Create Kind Cluster
     - name: Create Kind Cluster
       run: |
         kind create cluster --name perf-cluster
         kubectl get nodes
 
-    # 4️⃣ Build nginx Docker image
     - name: Build Nginx Image
-      run: |
-        docker build -t perf-nginx:latest ./app
+      run: docker build -t perf-nginx:latest ./app
 
-    # 5️⃣ Load image into Kind
     - name: Load Image into Kind
-      run: |
-        kind load docker-image perf-nginx:latest --name perf-cluster
+      run: kind load docker-image perf-nginx:latest --name perf-cluster
 
-    # 6️⃣ Deploy Kubernetes Resources
-    - name: Deploy Kubernetes Manifests
-      run: |
-        kubectl apply -f k8s/
+    - name: Deploy MySQL
+      run: kubectl apply -f k8s/mysql-deployment.yaml
 
-    # 7️⃣ Wait for Nginx to be Ready
+    - name: Deploy Nginx
+      run: kubectl apply -f k8s/nginx-deployment.yaml
+
+    - name: Deploy Service
+      run: kubectl apply -f k8s/nginx-service.yaml
+
     - name: Wait for Nginx Deployment
-      run: |
-        kubectl rollout status deployment/nginx-deployment --timeout=120s
+      run: kubectl rollout status deployment/perf-nginx --timeout=120s
 
-    # 8️⃣ Run JMeter Job
+    # 🔥 IMPORTANT FIX — CREATE CONFIGMAP
+    - name: Create JMeter ConfigMap
+      run: |
+        kubectl create configmap jmeter-config \
+        --from-file=jmeter/Ephemeral_cicd.jmx
+
     - name: Apply JMeter Job
-      run: |
-        kubectl apply -f k8s/jmeter-job.yaml
+      run: kubectl apply -f k8s/jmeter-job.yaml
 
-    # 9️⃣ Wait for JMeter to Complete (with debug)
-    - name: Wait for JMeter Job to Complete
-      run: |
-        kubectl wait --for=condition=complete job/jmeter-job --timeout=180s || true
-        echo "----- JOB STATUS -----"
-        kubectl get jobs
-        echo "----- POD STATUS -----"
-        kubectl get pods
-        echo "----- JMETER LOGS -----"
-        POD=$(kubectl get pods --selector=job-name=jmeter-job -o jsonpath='{.items[0].metadata.name}')
-        kubectl logs $POD
+    - name: Wait for JMeter Job
+      run: kubectl wait --for=condition=complete job/jmeter-job --timeout=300s
 
-    # 🔟 Copy JMeter Report from Pod
     - name: Copy Report
       run: |
-        mkdir -p reports
-        POD=$(kubectl get pods --selector=job-name=jmeter-job -o jsonpath='{.items[0].metadata.name}')
+        mkdir reports
+        POD=$(kubectl get pod -l job-name=jmeter-job -o jsonpath="{.items[0].metadata.name}")
         kubectl cp $POD:/results ./reports
 
-    # 1️⃣1️⃣ Upload Artifact
     - name: Upload Performance Report
       uses: actions/upload-artifact@v4
       with:
         name: k8s-performance-report
         path: reports
 
-    # 1️⃣2️⃣ Cleanup Cluster
-    - name: Delete Kind Cluster
+    - name: Cleanup
       if: always()
-      run: |
-        kind delete cluster --name perf-cluster
+      run: kind delete cluster --name perf-cluster

@@ -10,6 +10,7 @@ spec:
       containers:
       - name: jmeter
         image: justb4/jmeter:latest
+        imagePullPolicy: IfNotPresent
         command:
         - jmeter
         - -n
@@ -21,12 +22,12 @@ spec:
         - -o
         - /results/report
         volumeMounts:
-        - name: jmeter-test
+        - name: jmeter-script
           mountPath: /tests
         - name: jmeter-results
           mountPath: /results
       volumes:
-      - name: jmeter-test
+      - name: jmeter-script
         configMap:
           name: jmeter-config
       - name: jmeter-results
