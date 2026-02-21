@@ -59,7 +59,7 @@ jobs:
       run: |
         mkdir reports
         POD=$(kubectl get pod -l job-name=jmeter-job -o jsonpath="{.items[0].metadata.name}")
-        kubectl cp $POD:/results ./reports
+        kubectl cp $POD:/results/report ./reports
 
     - name: Upload Performance Report
       uses: actions/upload-artifact@v4
