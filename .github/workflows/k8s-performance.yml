@@ -41,7 +41,7 @@ jobs:
       run: kubectl apply -f k8s/nginx-service.yaml
 
     - name: Wait for Nginx Deployment
-      run: kubectl rollout status deployment/perf-nginx --timeout=120s
+      run: kubectl rollout status deployment/nginx-deployment --timeout=120s
 
     # 🔥 IMPORTANT FIX — CREATE CONFIGMAP
     - name: Create JMeter ConfigMap
